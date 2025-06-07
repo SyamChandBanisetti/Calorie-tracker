@@ -1,58 +1,35 @@
 import streamlit as st
 import cv2
-from helper import estimate_calories
+import tempfile
 import time
+import numpy as np
+from utils.calorie_counter import process_video
 
-# Page config
-st.set_page_config(page_title="🏃‍♂️ Exercise Calorie Tracker", layout="wide")
-st.title("🏋️ Real-Time Exercise Calorie Counter")
+st.set_page_config(page_title="🏃 Calorie Tracker", layout="wide")
 
-# Sidebar inputs
-st.sidebar.header("📝 User Details")
-name = st.sidebar.text_input("Enter your name")
-weight = st.sidebar.number_input("Enter your weight (kg)", min_value=20, max_value=200, value=70)
+st.title("🏃‍♂️ Real-Time Calorie Burn Estimator")
+st.markdown("Upload your **exercise video** and get a calorie burn estimate based on motion intensity.")
 
-start_button = st.sidebar.button("Start Camera")
+# Input user details
+with st.sidebar:
+    st.header("👤 User Details")
+    name = st.text_input("Enter your name", "John Doe")
+    weight = st.number_input("Enter your weight (kg)", min_value=20.0, max_value=200.0, value=70.0)
+    uploaded_video = st.file_uploader("📹 Upload Exercise Video", type=["mp4", "mov", "avi"])
 
-# Session state for calories
-if 'calories' not in st.session_state:
-    st.session_state.calories = 0
-if 'start_time' not in st.session_state:
-    st.session_state.start_time = None
+if uploaded_video:
+    tfile = tempfile.NamedTemporaryFile(delete=False)
+    tfile.write(uploaded_video.read())
+    cap = cv2.VideoCapture(tfile.name)
 
-if start_button:
-    st.session_state.start_time = time.time()
-    st.sidebar.success("Camera started. Do some jumping/crouching!")
+    st.video(tfile.name)
+    st.markdown("---")
+    st.subheader("📊 Calorie Burn Report")
 
-    # Webcam
-    cap = cv2.VideoCapture(0)
-    frame_window = st.empty()
-    prev_frame = None
+    with st.spinner("Analyzing video and estimating calories..."):
+        calories, total_motion = process_video(cap, weight)
+        st.success(f"✅ Name: {name}")
+        st.info(f"📏 Total Motion Detected: {total_motion:.2f}")
+        st.success(f"🔥 Estimated Calories Burned: {calories:.2f} kcal")
 
-    while cap.isOpened():
-        ret, frame = cap.read()
-        if not ret:
-            break
-
-        # Resize
-        frame = cv2.resize(frame, (640, 480))
-
-        # Estimate calories
-        frame, movement = estimate_calories(frame, prev_frame)
-        st.session_state.calories += (movement * 0.001 * weight)
-
-        # Display
-        frame_window.image(frame, channels="BGR")
-
-        prev_frame = frame
-
-        # Stop with Streamlit's rerun
-        if st.sidebar.button("⏹️ Stop"):
-            break
-
-    cap.release()
-
-# Final result
-if st.session_state.start_time:
-    duration = round(time.time() - st.session_state.start_time, 2)
-    st.success(f"✅ {name}, you burned approx. **{st.session_state.calories:.2f} calories** in **{duration} seconds**!")
+    st.markdown("✅ This estimate is based on motion intensity and body weight. For medical accuracy, use wearables or consult professionals.")
